@@ -43,6 +43,25 @@ function out = field(inp, t, n)
     out = [ds, di1, di2, dr1, dr2, ds1, ds2, di12, di21, dr, dsv, dv1, dv2];
 endfunction
 
+function armazenar_resultados(sim, k, in, S_todas, I1_todas, I2_todas, R1_todas, R2_todas, ...
+                             S1_todas, S2_todas, I12_todas, I21_todas, R_todas, SV_todas, V1_todas, V2_todas)
+    % Armazena os resultados de todas as variáveis para a simulação atual
+    idx = k - 18250;
+    S_todas(sim, idx) = in(1);
+    I1_todas(sim, idx) = in(2);
+    I2_todas(sim, idx) = in(3);
+    R1_todas(sim, idx) = in(4);
+    R2_todas(sim, idx) = in(5);
+    S1_todas(sim, idx) = in(6);
+    S2_todas(sim, idx) = in(7);
+    I12_todas(sim, idx) = in(8);
+    I21_todas(sim, idx) = in(9);
+    R_todas(sim, idx) = in(10);
+    SV_todas(sim, idx) = in(11);
+    V1_todas(sim, idx) = in(12);
+    V2_todas(sim, idx) = in(13);
+endfunction
+
 function out = rk(inp, t, dt, n)
     k1 = field(inp, t, n);
     k2 = field(inp + (dt / 2) * k1, t + dt / 2, n);
@@ -53,152 +72,250 @@ function out = rk(inp, t, dt, n)
     out = max(0, inp + (dt / 6) * temp);
 endfunction
 
-% Main script
-in = zeros(1, 13);
-in(1) = 700;
-in(2) = 200;
-in(3) = 100;
-in(4) = 0;
-in(5) = 0;
-in(6) = 0;
-in(7) = 0;
-in(8) = 0;
-in(9) = 0;
-in(10) = 0;
-in(11) = 9000;
-in(12) = 500;
-in(13) = 500;
+function in = aplicar_erro_aleatorio(in, sim)
+    % Aplica erro aleatório de ±5% em todas as variáveis
+    fatores_erro = 0.95 + 0.10 * rand(1, 13);
+    in = max(0, in .* fatores_erro);
+    fprintf('  Simulação %d: Erro aleatório de ±5%% aplicado no passo 18250\n', sim);
+endfunction
 
-tempo = 0;
+function [S_todas, I1_todas, I2_todas, R1_todas, R2_todas, S1_todas, S2_todas, ...
+          I12_todas, I21_todas, R_todas, SV_todas, V1_todas, V2_todas] = ...
+          executar_simulacao(sim, condicoes_iniciais, dt, kk, S_todas, I1_todas, I2_todas, ...
+                            R1_todas, R2_todas, S1_todas, S2_todas, I12_todas, I21_todas, ...
+                            R_todas, SV_todas, V1_todas, V2_todas)
+    % Executa uma simulação completa
+    fprintf('Executando simulação %d...\n', sim);
+
+    in = condicoes_iniciais(1, :);
+    tempo = 0;
+    n0 = sum(in(1:10));
+
+    for k = 1:kk
+        in = rk(in, tempo, dt, n0);
+        tempo = tempo + dt;
+
+        if k == 18250
+            in = aplicar_erro_aleatorio(in, sim);
+        end
+
+        if k > 18250
+            idx = k - 18250;
+            S_todas(sim, idx) = in(1);
+            I1_todas(sim, idx) = in(2);
+            I2_todas(sim, idx) = in(3);
+            R1_todas(sim, idx) = in(4);
+            R2_todas(sim, idx) = in(5);
+            S1_todas(sim, idx) = in(6);
+            S2_todas(sim, idx) = in(7);
+            I12_todas(sim, idx) = in(8);
+            I21_todas(sim, idx) = in(9);
+            R_todas(sim, idx) = in(10);
+            SV_todas(sim, idx) = in(11);
+            V1_todas(sim, idx) = in(12);
+            V2_todas(sim, idx) = in(13);
+        end
+    end
+endfunction
+
+% Main script - 5 diferentes cenários
+qq = 5;
+
+% Todas as simulações começam com as MESMAS condições iniciais
+condicoes_iniciais = zeros(qq, 13);
+
+% Condições iniciais idênticas para todas as simulações
+for sim = 1:qq
+    condicoes_iniciais(sim, :) = [700, 200, 100, 0, 0, 0, 0, 0, 0, 0, 9000, 500, 500];
+end
+
 dt = 1 / 365;
-acum = 0;
-for i = 1:10
-    acum += in(i);
-endfor
-n0 = acum;  % numero de pessoas
-
 kk = 100 * 365;
 
-% cria listas para inserir os resultados de cada variável passo a passo
-S = zeros(1,kk);
-I1 = zeros(1,kk);
-I2 = zeros(1,kk);
-R1 = zeros(1,kk);
-R2 = zeros(1,kk);
-S1 = zeros(1,kk);
-S2 = zeros(1,kk);
-I12 = zeros(1,kk);
-I21 = zeros(1,kk);
-R = zeros(1,kk);
-SV = zeros(1,kk);
-V1 = zeros(1,kk);
-V2 = zeros(1,kk);
+% Arrays para armazenar resultados de todas as simulações
+% Dimensão: (número de simulações, número de passos)
+S_todas = zeros(qq, kk/2);
+I1_todas = zeros(qq, kk/2);
+I2_todas = zeros(qq, kk/2);
+R1_todas = zeros(qq, kk/2);
+R2_todas = zeros(qq, kk/2);
+S1_todas = zeros(qq, kk/2);
+S2_todas = zeros(qq, kk/2);
+I12_todas = zeros(qq, kk/2);
+I21_todas = zeros(qq, kk/2);
+R_todas = zeros(qq, kk/2);
+SV_todas = zeros(qq, kk/2);
+V1_todas = zeros(qq, kk/2);
+V2_todas = zeros(qq, kk/2);
 
- for k = 1:kk
-     in = rk(in, tempo, dt, n0);
-     tempo = tempo + dt;
-     %insere os resultados de cada variável em uma lista para depois plotar
-     S(k) = in(1);
-     I1(k) = in(2);
-     I2(k) = in(3);
-     R1(k) = in(4);
-     R2(k) = in(5);
-     S1(k) = in(6);
-     S2(k) = in(7);
-     I12(k) = in(8);
-     I21(k) = in(9);
-     R(k) = in(10);
-     SV(k) = in(11);
-     V1(k) = in(12);
-     V2(k) = in(13);
-     % Para kk passos
+% Executar cada simulação
+for sim = 1:qq
+    [S_todas, I1_todas, I2_todas, R1_todas, R2_todas, S1_todas, S2_todas, ...
+     I12_todas, I21_todas, R_todas, SV_todas, V1_todas, V2_todas] = ...
+     executar_simulacao(sim, condicoes_iniciais, dt, kk, S_todas, I1_todas, I2_todas, ...
+                       R1_todas, R2_todas, S1_todas, S2_todas, I12_todas, I21_todas, ...
+                       R_todas, SV_todas, V1_todas, V2_todas);
+end
 
-endfor
+fprintf('Todas as simulações concluídas!\n');
 
-%plots
+% Salvar resultados em arquivo
+save('resultados_multiplas_simulacoes.mat', 'S_todas', 'I1_todas', 'I2_todas', ...
+     'R1_todas', 'R2_todas', 'S1_todas', 'S2_todas', 'I12_todas', 'I21_todas', ...
+     'R_todas', 'SV_todas', 'V1_todas', 'V2_todas');
 
-passos = 1:kk;
+fprintf('Resultados salvos em resultados_multiplas_simulacoes.mat\n');
 
-figure
+% Plots comparativos
+passos = 1:kk/2;
+cores = {'b', 'r', 'g', 'm', 'c'};
+legendas = {'Sim 1', 'Sim 2', 'Sim 3', 'Sim 4', 'Sim 5'};
+
+figure('Position', [100, 100, 1400, 1000]);
 
 subplot(4,4,1)
-plot(passos, S);
-title ('S (Naive Humans)');
-xlabel ('passos');
-ylabel ('S');
+hold on;
+for sim = 1:qq
+    plot(passos, S_todas(sim, :), cores{sim});
+end
+title('S (Naive Humans)');
+xlabel('passos');
+ylabel('S');
+legend(legendas, 'Location', 'best', 'FontSize', 6);
+hold off;
 
 subplot(4,4,2)
-plot(passos, I1);
+hold on;
+for sim = 1:qq
+    plot(passos, I1_todas(sim, :), cores{sim});
+end
 title('I1 (Primary Inf Strain 1)');
-xlabel ('passos');
-ylabel ('I1');
+xlabel('passos');
+ylabel('I1');
+hold off;
 
 subplot(4,4,3)
-plot(passos, I2);
+hold on;
+for sim = 1:qq
+    plot(passos, I2_todas(sim, :), cores{sim});
+end
 title('I2 (Primary Inf Strain 2)');
-xlabel ('passos');
-ylabel ('I2');
+xlabel('passos');
+ylabel('I2');
+hold off;
 
 subplot(4,4,4)
-plot(passos, R1);
+hold on;
+for sim = 1:qq
+    plot(passos, R1_todas(sim, :), cores{sim});
+end
 title('R1 (Cross Immune from 1)');
-xlabel ('passos');
-ylabel ('R1');
+xlabel('passos');
+ylabel('R1');
+hold off;
 
 subplot(4,4,5)
-plot(passos, R2);
+hold on;
+for sim = 1:qq
+    plot(passos, R2_todas(sim, :), cores{sim});
+end
 title('R2 (Cross Immune from 2)');
-xlabel ('passos');
-ylabel ('R2');
+xlabel('passos');
+ylabel('R2');
+hold off;
 
 subplot(4,4,6)
-plot(passos, S1);
+hold on;
+for sim = 1:qq
+    plot(passos, S1_todas(sim, :), cores{sim});
+end
 title('S1 (Susceptible to 2)');
-xlabel ('passos');
-ylabel ('S1');
+xlabel('passos');
+ylabel('S1');
+hold off;
 
 subplot(4,4,7)
-plot(passos, S2);
+hold on;
+for sim = 1:qq
+    plot(passos, S2_todas(sim, :), cores{sim});
+end
 title('S2 (Susceptible to 1)');
-xlabel ('passos');
-ylabel ('S2');
+xlabel('passos');
+ylabel('S2');
+hold off;
 
 subplot(4,4,8)
-plot(passos, I12);
-title('Secondary Inf Strain 2');
-xlabel ('passos');
-ylabel ('I12');
+hold on;
+for sim = 1:qq
+    plot(passos, I12_todas(sim, :), cores{sim});
+end
+title('I12 (Secondary Inf Strain 2)');
+xlabel('passos');
+ylabel('I12');
+hold off;
 
 subplot(4,4,9)
-plot(passos, I21);
+hold on;
+for sim = 1:qq
+    plot(passos, I21_todas(sim, :), cores{sim});
+end
 title('I21 (Secondary Inf Strain 1)');
-xlabel ('passos');
-ylabel ('I21');
+xlabel('passos');
+ylabel('I21');
+hold off;
 
 subplot(4,4,10)
-plot(passos, R);
+hold on;
+for sim = 1:qq
+    plot(passos, R_todas(sim, :), cores{sim});
+end
 title('R (Totally recovered)');
-xlabel ('passos');
-ylabel ('R');
+xlabel('passos');
+ylabel('R');
+hold off;
 
 subplot(4,4,11)
-plot(passos, SV);
+hold on;
+for sim = 1:qq
+    plot(passos, SV_todas(sim, :), cores{sim});
+end
 title('SV (Susceptible vectors)');
-xlabel ('passos');
-ylabel ('SV');
+xlabel('passos');
+ylabel('SV');
+hold off;
 
 subplot(4,4,12)
-plot(passos, V1);
+hold on;
+for sim = 1:qq
+    plot(passos, V1_todas(sim, :), cores{sim});
+end
 title('V1 (Vectors Strain 1)');
-xlabel ('passos');
-ylabel ('V1');
+xlabel('passos');
+ylabel('V1');
+hold off;
 
 subplot(4,4,13)
-plot(passos, V2);
+hold on;
+for sim = 1:qq
+    plot(passos, V2_todas(sim, :), cores{sim});
+end
 title('V2 (Vectors Strain 2)');
-xlabel ('passos');
-ylabel ('V2');
+xlabel('passos');
+ylabel('V2');
+hold off;
 
-result = rk(in, tempo, dt, n0);
-disp(result);
+print -dpng 'comparacao_5_simulacoes.png';
+fprintf('Gráfico salvo em comparacao_5_simulacoes.png\n');
 
+% Exibir estatísticas finais
+fprintf('\n=== ESTATÍSTICAS FINAIS (último passo) ===\n');
+variaveis = {'S', 'I1', 'I2', 'R1', 'R2', 'S1', 'S2', 'I12', 'I21', 'R', 'SV', 'V1', 'V2'};
+dados_finais = {S_todas, I1_todas, I2_todas, R1_todas, R2_todas, S1_todas, S2_todas, ...
+                I12_todas, I21_todas, R_todas, SV_todas, V1_todas, V2_todas};
+
+for i = 1:length(variaveis)
+    fprintf('\n%s:\n', variaveis{i});
+    for sim = 1:qq
+        fprintf('  Sim %d: %.2f\n', sim, dados_finais{i}(sim, end));
+    end
+end
