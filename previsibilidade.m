@@ -100,26 +100,30 @@ function [S_todas, I1_todas, I2_todas, R1_todas, R2_todas, S1_todas, S2_todas, .
         end
 
         if k > 18250
-            idx = k - 18250;
-            S_todas(sim, idx) = in(1);
-            I1_todas(sim, idx) = in(2);
-            I2_todas(sim, idx) = in(3);
-            R1_todas(sim, idx) = in(4);
-            R2_todas(sim, idx) = in(5);
-            S1_todas(sim, idx) = in(6);
-            S2_todas(sim, idx) = in(7);
-            I12_todas(sim, idx) = in(8);
-            I21_todas(sim, idx) = in(9);
-            R_todas(sim, idx) = in(10);
-            SV_todas(sim, idx) = in(11);
-            V1_todas(sim, idx) = in(12);
-            V2_todas(sim, idx) = in(13);
+          idx = k - 18250;
+          if sim == 2 %Insere os valores de I12 e I21 da primeira simulação na segunda
+            in(8) = I12_todas(1,idx);
+            in(9) = I21_todas(1,idx);
+          endif
+          S_todas(sim, idx) = in(1);
+          I1_todas(sim, idx) = in(2);
+          I2_todas(sim, idx) = in(3);
+          R1_todas(sim, idx) = in(4);
+          R2_todas(sim, idx) = in(5);
+          S1_todas(sim, idx) = in(6);
+          S2_todas(sim, idx) = in(7);
+          I12_todas(sim, idx) = in(8);
+          I21_todas(sim, idx) = in(9);
+          R_todas(sim, idx) = in(10);
+          SV_todas(sim, idx) = in(11);
+          V1_todas(sim, idx) = in(12);
+          V2_todas(sim, idx) = in(13);
         end
     end
 endfunction
 
-% Main script - 5 diferentes cenários
-qq = 5;
+% Main script - 2 diferentes cenários
+qq = 2;
 
 % Todas as simulações começam com as MESMAS condições iniciais
 condicoes_iniciais = zeros(qq, 13);
@@ -173,7 +177,7 @@ legendas = {'Sim 1', 'Sim 2', 'Sim 3', 'Sim 4', 'Sim 5'};
 
 figure('Position', [100, 100, 1400, 1000]);
 
-subplot(4,4,1)
+subplot(5,5,1)
 hold on;
 for sim = 1:qq
     plot(passos, S_todas(sim, :), cores{sim});
@@ -184,7 +188,7 @@ ylabel('S');
 legend(legendas, 'Location', 'best', 'FontSize', 6);
 hold off;
 
-subplot(4,4,2)
+subplot(5,5,2)
 hold on;
 for sim = 1:qq
     plot(passos, I1_todas(sim, :), cores{sim});
@@ -194,7 +198,7 @@ xlabel('passos');
 ylabel('I1');
 hold off;
 
-subplot(4,4,3)
+subplot(5,5,3)
 hold on;
 for sim = 1:qq
     plot(passos, I2_todas(sim, :), cores{sim});
@@ -204,7 +208,7 @@ xlabel('passos');
 ylabel('I2');
 hold off;
 
-subplot(4,4,4)
+subplot(5,5,4)
 hold on;
 for sim = 1:qq
     plot(passos, R1_todas(sim, :), cores{sim});
@@ -214,7 +218,7 @@ xlabel('passos');
 ylabel('R1');
 hold off;
 
-subplot(4,4,5)
+subplot(5,5,5)
 hold on;
 for sim = 1:qq
     plot(passos, R2_todas(sim, :), cores{sim});
@@ -224,7 +228,7 @@ xlabel('passos');
 ylabel('R2');
 hold off;
 
-subplot(4,4,6)
+subplot(5,5,6)
 hold on;
 for sim = 1:qq
     plot(passos, S1_todas(sim, :), cores{sim});
@@ -234,7 +238,7 @@ xlabel('passos');
 ylabel('S1');
 hold off;
 
-subplot(4,4,7)
+subplot(5,5,7)
 hold on;
 for sim = 1:qq
     plot(passos, S2_todas(sim, :), cores{sim});
@@ -244,7 +248,7 @@ xlabel('passos');
 ylabel('S2');
 hold off;
 
-subplot(4,4,8)
+subplot(5,5,8)
 hold on;
 for sim = 1:qq
     plot(passos, I12_todas(sim, :), cores{sim});
@@ -254,7 +258,7 @@ xlabel('passos');
 ylabel('I12');
 hold off;
 
-subplot(4,4,9)
+subplot(5,5,9)
 hold on;
 for sim = 1:qq
     plot(passos, I21_todas(sim, :), cores{sim});
@@ -264,7 +268,7 @@ xlabel('passos');
 ylabel('I21');
 hold off;
 
-subplot(4,4,10)
+subplot(5,5,10)
 hold on;
 for sim = 1:qq
     plot(passos, R_todas(sim, :), cores{sim});
@@ -274,7 +278,7 @@ xlabel('passos');
 ylabel('R');
 hold off;
 
-subplot(4,4,11)
+subplot(5,5,11)
 hold on;
 for sim = 1:qq
     plot(passos, SV_todas(sim, :), cores{sim});
@@ -284,7 +288,7 @@ xlabel('passos');
 ylabel('SV');
 hold off;
 
-subplot(4,4,12)
+subplot(5,5,12)
 hold on;
 for sim = 1:qq
     plot(passos, V1_todas(sim, :), cores{sim});
@@ -294,7 +298,7 @@ xlabel('passos');
 ylabel('V1');
 hold off;
 
-subplot(4,4,13)
+subplot(5,5,13)
 hold on;
 for sim = 1:qq
     plot(passos, V2_todas(sim, :), cores{sim});
@@ -303,6 +307,72 @@ title('V2 (Vectors Strain 2)');
 xlabel('passos');
 ylabel('V2');
 hold off;
+
+subplot(5,5,14)
+plot(passos, S_todas(1, :) - S_todas(2, :), cores{sim});
+title('error S');
+xlabel('passos');
+ylabel('diff S');
+
+subplot(5,5,15)
+plot(passos, I1_todas(1, :) - I1_todas(2, :), cores{sim});
+title('error I1');
+xlabel('passos');
+ylabel('diff I1');
+
+subplot(5,5,16)
+plot(passos, I2_todas(1, :) - I2_todas(2, :), cores{sim});
+title('error I2');
+xlabel('passos');
+ylabel('diff I2');
+
+subplot(5,5,17)
+plot(passos, R1_todas(1, :) - R1_todas(2, :), cores{sim});
+title('error R1');
+xlabel('passos');
+ylabel('diff R1');
+
+subplot(5,5,18)
+plot(passos, R2_todas(1, :) - R2_todas(2, :), cores{sim});
+title('error R2');
+xlabel('passos');
+ylabel('diff R2');
+
+subplot(5,5,19)
+plot(passos, S1_todas(1, :) - S1_todas(2, :), cores{sim});
+title('error S1');
+xlabel('passos');
+ylabel('diff S1');
+
+subplot(5,5,20)
+plot(passos, S2_todas(1, :) - S2_todas(2, :), cores{sim});
+title('error S2');
+xlabel('passos');
+ylabel('diff S2');
+
+subplot(5,5,21)
+plot(passos, R_todas(1, :) - R_todas(2, :), cores{sim});
+title('error R');
+xlabel('passos');
+ylabel('diff R');
+
+subplot(5,5,22)
+plot(passos, SV_todas(1, :) - SV_todas(2, :), cores{sim});
+title('error SV');
+xlabel('passos');
+ylabel('diff SV');
+
+subplot(5,5,23)
+plot(passos, V1_todas(1, :) - V1_todas(2, :), cores{sim});
+title('error V1');
+xlabel('passos');
+ylabel('diff V1');
+
+subplot(5,5,24)
+plot(passos, V2_todas(1, :) - V2_todas(2, :), cores{sim});
+title('error V2');
+xlabel('passos');
+ylabel('diff V2');
 
 print -dpng 'comparacao_5_simulacoes.png';
 fprintf('Gráfico salvo em comparacao_5_simulacoes.png\n');
