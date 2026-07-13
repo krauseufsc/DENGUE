@@ -1,27 +1,21 @@
 % ===================================================================
 % Modelo epidemiológico com dois sorotipos - versão VETORIZADA (batch)
 %
-% Estratégia de paralelização:
-%   Em vez de usar threads/processos (overhead alto no Octave), todas as
-%   simulações rodam SIMULTANEAMENTE em uma única matriz (qq × 13).
-%   Cada linha é uma simulação; as operações são vetorizadas via BLAS.
-%
-%   Fase 1 — Sim 1 corre isolada para produzir I12_ref e I21_ref.
-%   Fase 2 — Sims 2..qq correm juntas em batch: estado = matriz (qq-1)×13.
-%             A cada passo, colunas 8-9 das linhas dependentes são
-%             substituídas por I12_ref/I21_ref (leitura, sem concorrência).
+% Análise de sensibilidade: phi é fixo (constante) em todas as amostras
+%   Sim 1 (referência): phi = 0.8
+%   Sims 2..qq:         phi = 0.8 (mesmo valor, sem variação)
 % ===================================================================
 
 % ---------------------------------------------------------------------------
-% Campo vetorial escalar (usado na Fase 1)
+% Campo vetorial escalar (usado na Fase 1) — phi recebido como parâmetro
 % ---------------------------------------------------------------------------
 inp = zeros(1, 13);
-function out = field(inp, t, n)
+function out = field(inp, t, n, phi)
   s=inp(1); i1=inp(2); i2=inp(3); r1=inp(4); r2=inp(5);
   s1=inp(6); s2=inp(7); i12=inp(8); i21=inp(9);
   r=inp(10); sv=inp(11); v1=inp(12); v2=inp(13);
 
-  m=sv+v1+v2; phi=0.8; mu=1/65; alfa=2; gama=52;
+  m=sv+v1+v2; mu=1/65; alfa=2; gama=52;
   nu=36.5; teta=2*nu; omega=2*pi*6;
   xi=nu*(1+0.4*cos(omega*t)); beta=2*gama;
 
@@ -42,16 +36,15 @@ function out = field(inp, t, n)
 endfunction
 
 % ---------------------------------------------------------------------------
-% Campo vetorial em LOTE — IN é (P × 13), retorna (P × 13)
-% Cada linha é uma simulação independente; operações element-wise via BLAS.
+% Campo vetorial em LOTE — IN é (P × 13), phi é (P × 1), retorna (P × 13)
+% Cada linha é uma simulação independente com seu próprio valor de phi.
 % ---------------------------------------------------------------------------
-function OUT = field_batch(IN, t, N)
-  % N : vetor coluna (P×1) com população total de cada simulação
+function OUT = field_batch(IN, t, N, phi)
   s=IN(:,1); i1=IN(:,2); i2=IN(:,3); r1=IN(:,4); r2=IN(:,5);
   s1=IN(:,6); s2=IN(:,7); i12=IN(:,8); i21=IN(:,9);
   r=IN(:,10); sv=IN(:,11); v1=IN(:,12); v2=IN(:,13);
 
-  m=sv+v1+v2; phi=0.8; mu=1/65; alfa=2; gama=52;
+  m=sv+v1+v2; mu=1/65; alfa=2; gama=52;
   nu=36.5; teta=2*nu; omega=2*pi*6;
   xi=nu*(1+0.4*cos(omega*t)); beta=2*gama;
 
@@ -73,24 +66,24 @@ function OUT = field_batch(IN, t, N)
 endfunction
 
 % ---------------------------------------------------------------------------
-% RK4 escalar
+% RK4 escalar — phi repassado como parâmetro
 % ---------------------------------------------------------------------------
-function out = rk(inp, t, dt, n)
-  k1=field(inp,t,n);
-  k2=field(inp+(dt/2)*k1, t+dt/2, n);
-  k3=field(inp+(dt/2)*k2, t+dt/2, n);
-  k4=field(inp+dt*k3,      t+dt,   n);
+function out = rk(inp, t, dt, n, phi)
+  k1=field(inp,              t,      n, phi);
+  k2=field(inp+(dt/2)*k1,    t+dt/2, n, phi);
+  k3=field(inp+(dt/2)*k2,    t+dt/2, n, phi);
+  k4=field(inp+dt*k3,        t+dt,   n, phi);
   out = max(0, inp + (dt/6)*(k1+2*k2+2*k3+k4));
 endfunction
 
 % ---------------------------------------------------------------------------
-% RK4 em LOTE — IN (P×13), retorna (P×13)
+% RK4 em LOTE — phi é (P × 1), repassado para field_batch
 % ---------------------------------------------------------------------------
-function OUT = rk_batch(IN, t, dt, N)
-  k1=field_batch(IN,             t,        N);
-  k2=field_batch(IN+(dt/2).*k1,  t+dt/2,   N);
-  k3=field_batch(IN+(dt/2).*k2,  t+dt/2,   N);
-  k4=field_batch(IN+dt.*k3,       t+dt,    N);
+function OUT = rk_batch(IN, t, dt, N, phi)
+  k1=field_batch(IN,             t,      N, phi);
+  k2=field_batch(IN+(dt/2).*k1,  t+dt/2, N, phi);
+  k3=field_batch(IN+(dt/2).*k2,  t+dt/2, N, phi);
+  k4=field_batch(IN+dt.*k3,      t+dt,   N, phi);
   OUT = max(0, IN + (dt/6).*(k1+2.*k2+2.*k3+k4));
 endfunction
 
@@ -98,16 +91,27 @@ endfunction
 %  SCRIPT PRINCIPAL
 % ===========================================================================
 
-qq  = 5;
+qq  = 100;
 dt  = 1/365;
-kk  = 100*365;
-num_post = kk - 18250;
+kk  = 200*365;
+quantidade_anos = 100;
+passos_registrados = quantidade_anos*365;
+num_post = kk - passos_registrados;
 
 cond_ini_base = [700,200,100,0,0,0,0,0,0,0,9000,500,500];
 
 % ---------------------------------------------------------------------------
-% FASE 1 — Simulação 1 (escalar, sequencial)
-%   Obrigatória: gera I12_ref e I21_ref para as demais.
+% Definição de phi: agora fixo em 0.8 para todas as simulações do lote
+% (linspace mantido apenas por estrutura, mas ambos os limites são iguais,
+%  logo phi_lote é um vetor constante = phi_ref = 0.8)
+% ---------------------------------------------------------------------------
+phi_ref  = 0.8;
+phi_lote = linspace(phi_ref * 1, phi_ref * 1, qq - 1)';  % (P×1), constante = 0.8
+fprintf('phi_ref = %.4f | phi_lote: %.4f .. %.4f\n', ...
+        phi_ref, phi_lote(1), phi_lote(end));
+
+% ---------------------------------------------------------------------------
+% FASE 1 — Simulação 1 (escalar, sequencial, phi = phi_ref)
 % ---------------------------------------------------------------------------
 fprintf('=== FASE 1: Simulação 1 (referência) ===\n');
 t1 = tic;
@@ -120,17 +124,11 @@ I21_ref = zeros(1, num_post);
 res1    = zeros(num_post, 13);
 
 for k = 1:kk
-  in1   = rk(in1, tempo, dt, n0_1);
+  in1   = rk(in1, tempo, dt, n0_1, phi_ref);
   tempo = tempo + dt;
 
-  if k == 18250
-    fatores = 0.95 + 0.10*rand(1,13);
-    in1 = max(0, in1 .* fatores);
-    fprintf('  Sim 1: perturbação ±5%% aplicada no passo 18250\n');
-  end
-
-  if k > 18250
-    idx = k - 18250;
+  if k > passos_registrados
+    idx = k - passos_registrados;
     I12_ref(idx) = in1(8);
     I21_ref(idx) = in1(9);
     res1(idx,:)  = in1;
@@ -140,41 +138,31 @@ end
 fprintf('Fase 1 concluída em %.2f s\n\n', toc(t1));
 
 % ---------------------------------------------------------------------------
-% FASE 2 — Sims 2..qq em LOTE vetorizado
-%   Estado IN: matriz (P × 13), P = qq-1
-%   Todas as simulações avançam juntas num único rk_batch por passo.
-%   A cada passo após 18250, colunas 8-9 são sobrepostas por I12/I21 da ref.
+% FASE 2 — Sims 2..qq em lote vetorizado, todas com phi = 0.8 (mesmo valor)
 % ---------------------------------------------------------------------------
 if qq > 1
   fprintf('=== FASE 2: Simulações 2..%d em lote vetorizado ===\n', qq);
   t2 = tic;
 
-  P   = qq - 1;                             % número de sims em lote
-  IN  = repmat(cond_ini_base, P, 1);        % condições iniciais iguais
-  N   = sum(IN(:,1:10), 2);                 % pop. total por simulação (col)
+  cond_ini_IN = res1(passos_registrados, :);
+
+  P   = qq - 1;
+  IN  = repmat(cond_ini_IN, P, 1);
+  N   = sum(IN(:,1:10), 2);
   tempo = 0;
 
-  % Pré-aloca resultados do lote: cell array (uma célula por sim)
-  res_lote = zeros(P, num_post, 13);        % (sims × passos × vars)
+  res_lote = zeros(P, num_post, 13);
 
-  for k = 1:kk
-    IN    = rk_batch(IN, tempo, dt, N);
+  fatores = 0.9999 + 0.0002*rand(P, 13);
+  IN = max(0, IN .* fatores);
+  fprintf('  Sims 2..%d: perturbações ±0.0001%% aplicadas', qq);
+
+  for k = 1:passos_registrados
+    IN    = rk_batch(IN, tempo, dt, N, phi_lote);
     tempo = tempo + dt;
 
-    if k == 18250
-      % Perturbação independente para cada simulação do lote
-      fatores = 0.95 + 0.10*rand(P, 13);
-      IN = max(0, IN .* fatores);
-      fprintf('  Sims 2..%d: perturbações ±5%% aplicadas no passo 18250\n', qq);
-    end
-
-    if k > 18250
-      idx = k - 18250;
-      % Força I12/I21 da referência em todas as sims do lote
-      IN(:,8) = I12_ref(idx);
-      IN(:,9) = I21_ref(idx);
-      res_lote(:, idx, :) = reshape(IN, P, 1, 13);
-    end
+    idx = k;
+    res_lote(:, idx, :) = reshape(IN, P, 1, 13);
   end
 
   fprintf('Fase 2 concluída em %.2f s\n\n', toc(t2));
@@ -215,11 +203,12 @@ V2_todas  = montar(res1(:,13)', squeeze(res_lote(:,:,13)), qq, num_post);
 save('resultados_multiplas_simulacoes.mat', ...
      'S_todas','I1_todas','I2_todas','R1_todas','R2_todas', ...
      'S1_todas','S2_todas','I12_todas','I21_todas','R_todas', ...
-     'SV_todas','V1_todas','V2_todas');
+     'SV_todas','V1_todas','V2_todas', ...
+     'phi_lote','phi_ref');
 fprintf('Resultados salvos em resultados_multiplas_simulacoes.mat\n');
 
 % ---------------------------------------------------------------------------
-% Plots comparativos
+% Plots comparativos — idênticos ao original
 % ---------------------------------------------------------------------------
 passos   = 1:num_post;
 cores    = {'b','r','g','m','c'};
@@ -239,26 +228,51 @@ titulos   = {'S (Naive Humans)','I1 (Primary Inf Strain 1)', ...
              'V2 (Vectors Strain 2)'};
 ylabels   = {'S','I1','I2','R1','R2','S1','S2','I12','I21','R','SV','V1','V2'};
 
-for vi = 1:13
-  subplot(5,5,vi); hold on;
+% Variáveis sem par (mantêm 1 janela por variável, com todas as amostras)
+mainSingles     = {S_todas, R_todas, SV_todas};
+mainSinglesTit  = {'S (Naive Humans)','R (Totally recovered)','SV (Susceptible vectors)'};
+mainSinglesYlab = {'S','R','SV'};
+
+% Pares de variáveis: 1 única janela por par, plotando o máximo a cada
+% passo sobre TODAS as amostras (qq simulações) de AMBAS as variáveis
+mainPairs = { {I1_todas, I2_todas}, {R1_todas, R2_todas}, {S1_todas, S2_todas}, ...
+              {I12_todas, I21_todas}, {V1_todas, V2_todas} };
+mainPairsTit = {'max{I1,I2} (Infecções Primárias)', ...
+                'max{R1,R2} (Imunidade Cruzada)', ...
+                'max{S1,S2} (Suscetíveis ao outro sorotipo)', ...
+                'max{I12,I21} (Infecções Secundárias)', ...
+                'max{V1,V2} (Vetores)'};
+mainPairsYlab = {'max(I1,I2)','max(R1,R2)','max(S1,S2)','max(I12,I21)','max(V1,V2)'};
+
+idx_subplot = 0;
+
+for vi = 1:numel(mainSingles)
+  idx_subplot = idx_subplot + 1;
+  subplot(5,5,idx_subplot); hold on;
   for sim = 1:qq
-    plot(passos, vars_plot{vi}(sim,:), cores{sim});
+    plot(passos, mainSingles{vi}(sim,:));
   end
-  title(titulos{vi}); xlabel('passos'); ylabel(ylabels{vi});
-  if vi == 1
-    legend(legendas(1:qq), 'Location','best','FontSize',6);
-  end
+  title(mainSinglesTit{vi}); xlabel('passos'); ylabel(mainSinglesYlab{vi});
   hold off;
 end
 
+for vi = 1:numel(mainPairs)
+  idx_subplot = idx_subplot + 1;
+  par = mainPairs{vi};
+  combinado = [par{1}; par{2}];        % (2*qq × num_post): todas as amostras de ambas as variáveis
+  max_curva = max(combinado, [], 1);   % máximo por passo, sobre amostras e variáveis
+  subplot(5,5,idx_subplot);
+  plot(passos, max_curva, 'k');
+  title(mainPairsTit{vi}); xlabel('passos'); ylabel(mainPairsYlab{vi});
+end
+
 % Subplots de erro — maior erro absoluto entre todas as sims (2..qq) vs sim 1
-% Para cada variável e cada passo: max_sim( |var(sim,:) - var(1,:)| )
 erros_vars = {S_todas,I1_todas,I2_todas,R1_todas,R2_todas,S1_todas, ...
               S2_todas,R_todas,SV_todas,V1_todas,V2_todas};
-erros_tit  = {'max err S','max err I1','max err I2', ...
-              'max err R1','max err R2','max err S1', ...
-              'max err S2','max err R','max err SV', ...
-              'max err V1','max err V2'};
+erros_tit  = {'max |err| S','max |err| I1','max |err| I2', ...
+              'max |err| R1','max |err| R2','max |err| S1', ...
+              'max |err| S2','max |err| R','max |err| SV', ...
+              'max |err| V1','max |err| V2'};
 erros_ylab = {'max |diff| S','max |diff| I1','max |diff| I2', ...
               'max |diff| R1','max |diff| R2','max |diff| S1', ...
               'max |diff| S2','max |diff| R','max |diff| SV', ...
@@ -266,9 +280,7 @@ erros_ylab = {'max |diff| S','max |diff| I1','max |diff| I2', ...
 
 for vi = 1:11
   M = erros_vars{vi};
-  % abs. error de cada sim (2..qq) em relação à sim 1 → matriz (qq-1) × num_post
   erros_abs = abs(M(2:end, :) - M(1, :));
-  % maior valor em cada passo de tempo → vetor 1 × num_post
   max_erro = max(erros_abs, [], 1);
 
   subplot(5,5,13+vi);
