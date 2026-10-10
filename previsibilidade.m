@@ -41,9 +41,6 @@ function previsibilidade()
     DT_tempo  = DT_passos * dt;
     w_forcante = 2*pi*6;
 
-    % eps_lyap aumentado ligeiramente (1e-5) para as Diferenças Centrais
-    % não sofrerem de underflow (cancelamento catastrófico)
-    eps_lyap  = 1e-5;
     num_exp = 14;
     anos_burnin_pert = 60;
 
@@ -78,8 +75,7 @@ function previsibilidade()
     for bloco = 1:n_norm_total
 
         for passo = 1:DT_passos
-            % Integração Robusta usando Diferenças Finitas Centrais
-            [X_lyap, W_mat] = rk_lyap_tangent(X_lyap, W_mat, dt, dS_lyap, phi_ref, eps_lyap);
+            [X_lyap, W_mat] = rk_lyap_tangent(X_lyap, W_mat, dt, dS_lyap, phi_ref);
         end
 
         W_novo = zeros(num_exp, 14);
@@ -240,49 +236,51 @@ function OUT = field_lyap_batch(IN, N, phi)
 end
 
 % ---------------------------------------------------------------------------
-% INTEGRADOR TANGENTE COM DIFERENÇAS FINITAS CENTRAIS
-% Elimina o viés quadrático calculando o Jacobiano simetricamente (+eps e -eps)
+% INTEGRADOR TANGENTE COM JACOBIANA ANALÍTICA (Octave/MATLAB)
 % ---------------------------------------------------------------------------
-function [X_out, W_out] = rk_lyap_tangent(X, W, dt, N, phi, eps_lyap)
+function [X_out, W_out] = rk_lyap_tangent(X, W, dt, N, phi)
+
+  % Converte o vetor X em uma lista separada por vírgulas para a Jacobiana
+  args_X = num2cell(X);
+
   % Passo 1
-  F_X = field_lyap(X, N, phi);
-  F_plus  = field_lyap_batch(repmat(X, 14, 1) + eps_lyap * W, N, phi);
-  F_minus = field_lyap_batch(repmat(X, 14, 1) - eps_lyap * W, N, phi);
-  k1_X = F_X;
-  k1_W = (F_plus - F_minus) / (2 * eps_lyap);
+  F_X1 = field_lyap(X, N, phi);
+  J1   = jacobiana_lyap(args_X{:}, N, phi);
+  k1_X = F_X1;
+  k1_W = W * J1';
 
   % Passo 2
-  X_mid = X + (dt/2)*k1_X;
-  X_mid(1:13) = max(0, X_mid(1:13));
-  W_mid = W + (dt/2)*k1_W;
+  X2 = X + (dt/2)*k1_X;
+  X2(1:13) = max(0, X2(1:13));
+  W2 = W + (dt/2)*k1_W;
 
-  F_X_mid = field_lyap(X_mid, N, phi);
-  F_plus  = field_lyap_batch(repmat(X_mid, 14, 1) + eps_lyap * W_mid, N, phi);
-  F_minus = field_lyap_batch(repmat(X_mid, 14, 1) - eps_lyap * W_mid, N, phi);
-  k2_X = F_X_mid;
-  k2_W = (F_plus - F_minus) / (2 * eps_lyap);
+  args_X2 = num2cell(X2);
+  F_X2 = field_lyap(X2, N, phi);
+  J2   = jacobiana_lyap(args_X2{:}, N, phi);
+  k2_X = F_X2;
+  k2_W = W2 * J2';
 
   % Passo 3
-  X_mid2 = X + (dt/2)*k2_X;
-  X_mid2(1:13) = max(0, X_mid2(1:13));
-  W_mid2 = W + (dt/2)*k2_W;
+  X3 = X + (dt/2)*k2_X;
+  X3(1:13) = max(0, X3(1:13));
+  W3 = W + (dt/2)*k2_W;
 
-  F_X_mid2 = field_lyap(X_mid2, N, phi);
-  F_plus  = field_lyap_batch(repmat(X_mid2, 14, 1) + eps_lyap * W_mid2, N, phi);
-  F_minus = field_lyap_batch(repmat(X_mid2, 14, 1) - eps_lyap * W_mid2, N, phi);
-  k3_X = F_X_mid2;
-  k3_W = (F_plus - F_minus) / (2 * eps_lyap);
+  args_X3 = num2cell(X3);
+  F_X3 = field_lyap(X3, N, phi);
+  J3   = jacobiana_lyap(args_X3{:}, N, phi);
+  k3_X = F_X3;
+  k3_W = W3 * J3';
 
   % Passo 4
-  X_end = X + dt*k3_X;
-  X_end(1:13) = max(0, X_end(1:13));
-  W_end = W + dt*k3_W;
+  X4 = X + dt*k3_X;
+  X4(1:13) = max(0, X4(1:13));
+  W4 = W + dt*k3_W;
 
-  F_X_end = field_lyap(X_end, N, phi);
-  F_plus  = field_lyap_batch(repmat(X_end, 14, 1) + eps_lyap * W_end, N, phi);
-  F_minus = field_lyap_batch(repmat(X_end, 14, 1) - eps_lyap * W_end, N, phi);
-  k4_X = F_X_end;
-  k4_W = (F_plus - F_minus) / (2 * eps_lyap);
+  args_X4 = num2cell(X4);
+  F_X4 = field_lyap(X4, N, phi);
+  J4   = jacobiana_lyap(args_X4{:}, N, phi);
+  k4_X = F_X4;
+  k4_W = W4 * J4';
 
   % Combinação Final
   X_out = X + (dt/6)*(k1_X + 2*k2_X + 2*k3_X + k4_X);
